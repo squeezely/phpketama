@@ -7,9 +7,9 @@ class Ketama
 {
     private $cache;
     /**
-     * @var callable
+     * @var null|callable
      */
-    private $getCacheKeyCallable;
+    private $getCacheKeyCallable = null;
     /**
      * @var mixed
      */
@@ -165,6 +165,8 @@ class Ketama
 
     private function getCacheKey(string $key)
     {
+        if(!$this->getCacheKeyCallable) return $key;
+
         return call_user_func($this->getCacheKeyCallable, $key);
     }
 }
