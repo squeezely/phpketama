@@ -27,6 +27,11 @@ class Ketama
         $servers = $this->readDefinitions($filename);
         $mtime = filemtime($filename);
 
+        return $this->createContinuumFromArray($servers, $filename, $mtime);
+    }
+
+    public function createContinuumFromArray(array $servers, string $filename, int $mtime)
+    {
         $memory = array_reduce($servers, function ($carry, Serverinfo $server): int {
             return $carry + $server->getMemory();
         }, 0);
