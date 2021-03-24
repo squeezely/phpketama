@@ -145,7 +145,7 @@ class Ketama
     {
         $cacheKey = $this->getCacheKey('continuum.' . md5($uniqueCacheKey));
         $data = $this->cache->get($cacheKey);
-        if (null === $data) {
+        if (null === $data || $data === false) {
             return null;
         }
 
