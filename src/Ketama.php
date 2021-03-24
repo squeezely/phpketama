@@ -3,8 +3,6 @@ declare(strict_types=1);
 
 namespace Ketama;
 
-use Psr\SimpleCache\CacheInterface;
-
 class Ketama
 {
     private $cache;
@@ -12,15 +10,21 @@ class Ketama
      * @var callable
      */
     private $getCacheKeyCallable;
+    /**
+     * @var mixed
+     */
+    private int $cacheTtl;
 
-    public function __construct($cache)
+    public function __construct($cache, array $options = [])
     {
+        $this->cacheTtl = $options['ttl'] ?? 3600;
         $this->cache = $cache;
     }
 
     public function createContinuum(string $filename): Continuum
     {
-        if (null !== $continuum = $this->loadFromCache($filename)) {
+        $modificationTime = filemtime($filename);
+        if (null !== $continuum = $this->loadFromCache($filename, $modificationTime)) {
             return $continuum;
         }
 
@@ -30,8 +34,12 @@ class Ketama
         return $this->createContinuumFromArray($servers, $filename, $mtime);
     }
 
-    public function createContinuumFromArray(array $servers, string $filename, int $mtime)
+    public function createContinuumFromArray(array $servers, string $uniqueCacheKey, int $modificationTime)
     {
+        if (null !== $continuum = $this->loadFromCache($uniqueCacheKey, $modificationTime)) {
+            return $continuum;
+        }
+
         $memory = array_reduce($servers, function ($carry, Serverinfo $server): int {
             return $carry + $server->getMemory();
         }, 0);
@@ -66,8 +74,8 @@ class Ketama
             return 0;
         });
 
-        $continuum = Continuum::create($buckets, $mtime);
-        $this->storeCache($filename, $continuum);
+        $continuum = Continuum::create($buckets, $modificationTime);
+        $this->storeCache($uniqueCacheKey, $continuum);
 
         return $continuum;
     }
@@ -110,7 +118,7 @@ class Ketama
                 throw new KetamaException(sprintf(
                     "Invalid server definition at line %d: '%s'",
                     $lineno,
-                    ttrim($line)
+                    trim($line)
                 ));
             }
 
@@ -130,12 +138,12 @@ class Ketama
     private function storeCache(string $filename, Continuum $continuum): void
     {
         $cacheKey = $this->getCacheKey('continuum.' . md5($filename));
-        $this->cache->set($cacheKey, $continuum->serialize());
+        $this->cache->set($cacheKey, $continuum->serialize(), $this->cacheTtl);
     }
 
-    private function loadFromCache(string $filename): ?Continuum
+    private function loadFromCache(string $uniqueCacheKey, int $modificationTime = 0): ?Continuum
     {
-        $cacheKey = $this->getCacheKey('continuum.' . md5($filename));
+        $cacheKey = $this->getCacheKey('continuum.' . md5($uniqueCacheKey));
         $data = $this->cache->get($cacheKey);
         if (null === $data) {
             return null;
@@ -143,7 +151,7 @@ class Ketama
 
         $continuum = Continuum::unserialize($data);
 
-        if (filemtime($filename) !== $continuum->getModtime()) {
+        if ($modificationTime !== $continuum->getModtime()) {
             return null;
         }
 
