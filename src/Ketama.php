@@ -8,8 +8,12 @@ use Psr\SimpleCache\CacheInterface;
 class Ketama
 {
     private $cache;
+    /**
+     * @var callable
+     */
+    private $getCacheKeyCallable;
 
-    public function __construct(CacheInterface $cache)
+    public function __construct($cache)
     {
         $this->cache = $cache;
     }
@@ -120,14 +124,14 @@ class Ketama
 
     private function storeCache(string $filename, Continuum $continuum): void
     {
-        $key = 'continuum.' . md5($filename);
-        $this->cache->set($key, $continuum->serialize());
+        $cacheKey = $this->getCacheKey('continuum.' . md5($filename));
+        $this->cache->set($cacheKey, $continuum->serialize());
     }
 
     private function loadFromCache(string $filename): ?Continuum
     {
-        $key = 'continuum.' . md5($filename);
-        $data = $this->cache->get($key);
+        $cacheKey = $this->getCacheKey('continuum.' . md5($filename));
+        $data = $this->cache->get($cacheKey);
         if (null === $data) {
             return null;
         }
@@ -139,5 +143,15 @@ class Ketama
         }
 
         return $continuum;
+    }
+
+    public function setCacheKeyClosure(callable $func)
+    {
+        $this->getCacheKeyCallable = $func;
+    }
+
+    private function getCacheKey(string $key)
+    {
+        return call_user_func($this->getCacheKeyCallable, $key);
     }
 }
