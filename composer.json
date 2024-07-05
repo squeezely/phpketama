@@ -22,6 +22,11 @@
         "phpunit/phpunit": "^10.2.3",
         "phpstan/phpstan": "^1.10.25"
     },
+    "etxra": {
+        "branch-alias": {
+            "dev-master": "0.4.x-dev"
+        }
+    },
     "scripts": {
         "test": "@php vendor/bin/phpunit",
         "lint": "@php vendor/bin/phpstan"
