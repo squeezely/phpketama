@@ -21,18 +21,39 @@ class Ketama
         $this->cacheTtl = (int) ($options['ttl'] ?? 3600);
     }
 
+    /**
+     * @throws KetamaException
+     */
     public function createContinuum(string $filename): Continuum
     {
         $mtime = filemtime($filename);
-        if ($mtime === false) {
+        if($mtime === false) {
             throw new KetamaException(sprintf('Failed opening %s', $filename));
         }
 
-        if (null !== $continuum = $this->loadFromCache($filename, $mtime)) {
+        if(null !== $continuum = $this->loadFromCache($filename, $mtime)) {
             return $continuum;
         }
 
         $servers = $this->readDefinitions($filename);
+
+        return $this->createContinuumFromArray($servers, $filename, $mtime);
+    }
+
+    /**
+     * @param Serverinfo[] $servers
+     *
+     * @throws KetamaException
+     */
+    public function createContinuumFromArray(
+        array $servers,
+        string $uniqueCacheKey,
+        int $mtime,
+    ): Continuum
+    {
+        if (null !== $continuum = $this->loadFromCache($uniqueCacheKey, $mtime)) {
+            return $continuum;
+        }
 
         $memory = array_reduce($servers, function ($carry, Serverinfo $server): int {
             return $carry + $server->getMemory();
@@ -71,7 +92,7 @@ class Ketama
         });
 
         $continuum = Continuum::create($buckets, $mtime);
-        $this->storeCache($filename, $continuum);
+        $this->storeCache($uniqueCacheKey, $continuum);
 
         return $continuum;
     }
