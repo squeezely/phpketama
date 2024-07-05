@@ -3,42 +3,36 @@ declare(strict_types=1);
 
 namespace Ketama;
 
+use Psr\SimpleCache\CacheInterface;
+
 class Ketama
 {
-    private $cache;
+    private int $cacheTtl;
     /**
      * @var null|callable
      */
     private $getCacheKeyCallable = null;
-    /**
-     * @var mixed
-     */
-    private int $cacheTtl;
 
-    public function __construct($cache, array $options = [])
+    /**
+     * @param int[] $options
+     */
+    public function __construct(private CacheInterface $cache, array $options = [])
     {
-        $this->cacheTtl = $options['ttl'] ?? 3600;
-        $this->cache = $cache;
+        $this->cacheTtl = (int) ($options['ttl'] ?? 3600);
     }
 
     public function createContinuum(string $filename): Continuum
     {
-        $modificationTime = filemtime($filename);
-        if (null !== $continuum = $this->loadFromCache($filename, $modificationTime)) {
+        $mtime = filemtime($filename);
+        if ($mtime === false) {
+            throw new KetamaException(sprintf('Failed opening %s', $filename));
+        }
+
+        if (null !== $continuum = $this->loadFromCache($filename, $mtime)) {
             return $continuum;
         }
 
         $servers = $this->readDefinitions($filename);
-        $mtime = filemtime($filename);
-
-        return $this->createContinuumFromArray($servers, $filename, $mtime);
-    }
-
-    public function createContinuumFromArray(array $servers, string $uniqueCacheKey, int $modificationTime)
-    {
-        if (null !== $continuum = $this->loadFromCache($uniqueCacheKey, $modificationTime)) {
-            return $continuum;
-        }
 
         $memory = array_reduce($servers, function ($carry, Serverinfo $server): int {
             return $carry + $server->getMemory();
@@ -55,7 +49,9 @@ class Ketama
                 $digest = hash('md5', $ss, true);
 
                 for ($h = 0; $h < 4; $h++) {
-                    [, $point] = unpack('V', substr($digest, $h*4, 4));
+                    $unpacked = unpack('V', substr($digest, $h*4, 4));
+                    assert($unpacked !== false);
+                    [, $point] = $unpacked;
                     $buckets[$cont] = new Bucket($point, $server->getAddr());
                     $cont++;
                 }
@@ -74,12 +70,13 @@ class Ketama
             return 0;
         });
 
-        $continuum = Continuum::create($buckets, $modificationTime);
-        $this->storeCache($uniqueCacheKey, $continuum);
+        $continuum = Continuum::create($buckets, $mtime);
+        $this->storeCache($filename, $continuum);
 
         return $continuum;
     }
 
+    /** @return Serverinfo[] */
     private function readDefinitions(string $filename): array
     {
         $servers = [];
@@ -141,29 +138,31 @@ class Ketama
         $this->cache->set($cacheKey, $continuum->serialize(), $this->cacheTtl);
     }
 
-    private function loadFromCache(string $uniqueCacheKey, int $modificationTime = 0): ?Continuum
+    private function loadFromCache(string $filename, int $mtime = 0): ?Continuum
     {
-        $cacheKey = $this->getCacheKey('continuum.' . md5($uniqueCacheKey));
+        $cacheKey = $this->getCacheKey('continuum.' . md5($filename));
         $data = $this->cache->get($cacheKey);
-        if (null === $data || $data === false) {
+        if (null === $data) {
             return null;
         }
 
+        assert(is_string($data));
+
         $continuum = Continuum::unserialize($data);
 
-        if ($modificationTime !== $continuum->getModtime()) {
+        if ($mtime !== $continuum->getModtime()) {
             return null;
         }
 
         return $continuum;
     }
 
-    public function setCacheKeyClosure(callable $func)
+    public function setCacheKeyClosure(callable $func): void
     {
         $this->getCacheKeyCallable = $func;
     }
 
-    private function getCacheKey(string $key)
+    private function getCacheKey(string $key): string
     {
         if(!$this->getCacheKeyCallable) return $key;
 
