@@ -5,7 +5,7 @@ namespace Ketama;
 
 use Psr\SimpleCache\CacheInterface;
 
-// This use statements are super custom.. :(
+// This use statements are super custom, and hacky.. :(
 use AppBundle\Services\Cache\CacheInterface AS AppBundleCacheInterface;
 use AppBundle\Services\CacheKey;
 
@@ -170,7 +170,7 @@ class Ketama
         $cacheKey = $this->getCacheKey('continuum.' . md5($filename));
         // @phpstan-ignore-next-line
         $data = $this->cache->get($cacheKey);
-        if (null === $data) {
+        if (null === $data || false === $data) {
             return null;
         }
 
