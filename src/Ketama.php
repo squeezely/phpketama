@@ -5,6 +5,10 @@ namespace Ketama;
 
 use Psr\SimpleCache\CacheInterface;
 
+// This use statements are super custom.. :(
+use AppBundle\Services\Cache\CacheInterface AS AppBundleCacheInterface;
+use AppBundle\Services\CacheKey;
+
 class Ketama
 {
     private int $cacheTtl;
@@ -15,8 +19,9 @@ class Ketama
 
     /**
      * @param int[] $options
+     * @phpstan-ignore-next-line
      */
-    public function __construct(private CacheInterface $cache, array $options = [])
+    public function __construct(private CacheInterface|AppBundleCacheInterface $cache, array $options = [])
     {
         $this->cacheTtl = (int) ($options['ttl'] ?? 3600);
     }
@@ -156,12 +161,14 @@ class Ketama
     private function storeCache(string $filename, Continuum $continuum): void
     {
         $cacheKey = $this->getCacheKey('continuum.' . md5($filename));
+        // @phpstan-ignore-next-line
         $this->cache->set($cacheKey, $continuum->serialize(), $this->cacheTtl);
     }
 
     private function loadFromCache(string $filename, int $mtime = 0): ?Continuum
     {
         $cacheKey = $this->getCacheKey('continuum.' . md5($filename));
+        // @phpstan-ignore-next-line
         $data = $this->cache->get($cacheKey);
         if (null === $data) {
             return null;
@@ -183,7 +190,7 @@ class Ketama
         $this->getCacheKeyCallable = $func;
     }
 
-    private function getCacheKey(string $key): string
+    private function getCacheKey(string $key): string|CacheKey
     {
         if(!$this->getCacheKeyCallable) return $key;
 
